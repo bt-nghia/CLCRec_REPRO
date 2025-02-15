@@ -11,11 +11,7 @@ from torch.utils.data import DataLoader
 def data_load(dataset, has_v=True, has_a=True, has_t=True):
     dir_str = './Data/' + dataset
     train_data = np.load(dir_str+'/train.npy', allow_pickle=True)
-    val_data = np.load(dir_str+'/val_full.npy', allow_pickle=True)
-    val_warm_data = np.load(dir_str+'/val_warm.npy', allow_pickle=True)
     val_cold_data = np.load(dir_str+'/val_cold.npy', allow_pickle=True)
-    test_data = np.load(dir_str+'/test_full.npy', allow_pickle=True)
-    test_warm_data = np.load(dir_str+'/test_warm.npy', allow_pickle=True)
     test_cold_data = np.load(dir_str+'/test_cold.npy', allow_pickle=True)
     
     if dataset == 'movielens':
@@ -60,9 +56,19 @@ def data_load(dataset, has_v=True, has_a=True, has_t=True):
         v_feat = np.load(dir_str+'/feat_v.npy')
         v_feat = torch.tensor(v_feat, dtype=torch.float).cuda()
         a_feat = t_feat = None
+    # Steam Meal item ~ bundle
+    elif dataset == "Steam" :
+        num_user = 29634
+        num_item = 615
+        num_warm_item = 430
+        a_feat = v_feat = t_feat = None
+    elif dataset == "meal":
+        num_user = 1575
+        num_item = 3817
+        num_warm_item = 2671
+        a_feat = v_feat = t_feat = None
 
-
-    return num_user, num_item, num_warm_item, train_data, val_data, val_warm_data, val_cold_data, test_data, test_warm_data, test_cold_data, v_feat, a_feat, t_feat
+    return num_user, num_item, num_warm_item, train_data, val_cold_data, test_cold_data, v_feat, a_feat, t_feat
 
 
 class TrainingDataset(Dataset):
@@ -72,15 +78,19 @@ class TrainingDataset(Dataset):
         self.num_item = num_item
         self.num_neg = num_neg
         self.user_item_dict = user_item_dict
-        self.cold_set = set(np.load('./Data/'+dataset+'/cold_set.npy'))
-        self.all_set = set(range(num_user, num_user+num_item))-self.cold_set
+        # self.cold_set = set(np.load('./Data/'+dataset+'/cold_set.npy'))
+        # self.all_set = set(range(num_user, num_user+num_item))-self.cold_set
+        self.all_set = set(range(num_user, num_user+num_item))
 
     def __len__(self):
         return len(self.train_data)
 
     def __getitem__(self, index):
         user, pos_item = self.train_data[index]
-        neg_item = random.sample(self.all_set-set(self.user_item_dict[user]), self.num_neg)
+        # print(self.all_set)
+        # print(self.user_item_dict[user])
+        # exit()
+        neg_item = random.sample(list(self.all_set-set(self.user_item_dict[user])), self.num_neg)
         user_tensor = torch.LongTensor([user]*(self.num_neg+1))
         item_tensor = torch.LongTensor([pos_item] + neg_item)
         return user_tensor, item_tensor

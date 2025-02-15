@@ -4,12 +4,11 @@ import torch
 import torch.nn as nn
 from torch.nn import Parameter
 import torch.nn.functional as F
-from torch_geometric.utils import scatter_
 
 ##########################################################################
 
 class CLCRec(torch.nn.Module):
-    def __init__(self, num_user, num_item, num_warm_item, edge_index, reg_weight, dim_E, v_feat, a_feat, t_feat, temp_value, num_neg, lr_lambda, is_word, num_sample=0.5):
+    def __init__(self, num_user, num_item, num_warm_item, edge_index, reg_weight, dim_E, v_feat, a_feat, t_feat, temp_value, num_neg, lr_lambda, is_word, num_sample=0.5, device="cpu"):
         super(CLCRec, self).__init__()
         self.num_user = num_user
         self.num_item = num_item
@@ -23,6 +22,7 @@ class CLCRec(torch.nn.Module):
         self.id_embedding = nn.Parameter(nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_E))))
         self.dim_feat = 0
         self.num_sample = num_sample
+        self.device = device
         
         if v_feat is not None:
             self.v_feat = F.normalize(v_feat, dim=1)
@@ -56,24 +56,24 @@ class CLCRec(torch.nn.Module):
         self.bias = nn.Parameter(nn.init.kaiming_normal_(torch.rand((dim_E, 1))))
         self.att_sum_layer = nn.Linear(dim_E, dim_E)
 
-        self.result = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_E))).cuda()
+        self.result = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_E))).to(device)
 
 
     def encoder(self, mask=None):
-        feature = torch.tensor([]).cuda()
+        feature = torch.tensor([]).to(self.device)
         
-        if self.v_feat is not None:
-            feature = torch.cat((feature, self.v_feat), dim=1)
+        # if self.v_feat is not None:
+        #     feature = torch.cat((feature, self.v_feat), dim=1)
         
-        if self.a_feat is not None:
-            feature = torch.cat((feature, self.a_feat), dim=1)
+        # if self.a_feat is not None:
+        #     feature = torch.cat((feature, self.a_feat), dim=1)
         
-        if self.t_feat is not None:
-            if self.is_word:
-                t_feat = F.normalize(torch.tensor(scatter_('mean', self.t_feat[self.word_tensor[1]], self.word_tensor[0]))).cuda()
-                feature = torch.cat((feature, t_feat), dim=1)
-            else:
-                feature = torch.cat((feature, self.t_feat), dim=1)
+        # if self.t_feat is not None:
+        #     if self.is_word:
+        #         t_feat = F.normalize(torch.tensor(scatter_('mean', self.t_feat[self.word_tensor[1]], self.word_tensor[0]))).cuda()
+        #         feature = torch.cat((feature, t_feat), dim=1)
+        #     else:
+        #         feature = torch.cat((feature, self.t_feat), dim=1)
 
 
         feature = F.leaky_relu(self.encoder_layer1(feature))
@@ -99,25 +99,27 @@ class CLCRec(torch.nn.Module):
         item_tensor = item_tensor.view(-1, 1).squeeze()
 
 
-        feature = self.encoder()
-        all_item_feat = feature[item_tensor-self.num_user]
+        # feature = self.encoder()
+        # all_item_feat = feature[item_tensor-self.num_user]
+        # all_item_feat = feature[item_tensor]
 
         user_embedding = self.id_embedding[user_tensor]
         pos_item_embedding = self.id_embedding[pos_item_tensor]
         all_item_embedding = self.id_embedding[item_tensor]
+        all_item_feat = torch.zeros_like(all_item_embedding) # no modality
         
         head_feat = F.normalize(all_item_feat, dim=1)
         head_embed = F.normalize(pos_item_embedding, dim=1)
 
         all_item_input = all_item_embedding.clone()
-        rand_index = torch.randint(all_item_embedding.size(0), (int(all_item_embedding.size(0)*self.num_sample), )).cuda()
+        rand_index = torch.randint(all_item_embedding.size(0), (int(all_item_embedding.size(0)*self.num_sample), )).to(self.device)
         all_item_input[rand_index] = all_item_feat[rand_index].clone()
 
         self.contrastive_loss_1 = self.loss_contrastive(head_embed, head_feat, self.temp_value)
         self.contrastive_loss_2 = self.loss_contrastive(user_embedding, all_item_input, self.temp_value)
 
         reg_loss = ((torch.sqrt((user_embedding**2).sum(1))).mean()+(torch.sqrt((all_item_embedding**2).sum(1))).mean())/2
-        self.result = torch.cat((self.id_embedding[:self.num_user+self.num_warm_item], feature[self.num_warm_item:]), dim=0)
+        # self.result = torch.cat((self.id_embedding[:self.num_user+self.num_warm_item], self.id_embedding[]), dim=0)
 
         return self.contrastive_loss_1*self.lr_lambda+(self.contrastive_loss_2)*(1-self.lr_lambda), reg_loss
     

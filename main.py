@@ -86,14 +86,15 @@ if __name__ == '__main__':
     ##########################################################################################################################################
     print('Data loading ...')
 
-    num_user, num_item, num_warm_item, train_data, val_data, val_warm_data, val_cold_data, test_data, test_warm_data, test_cold_data, v_feat, a_feat, t_feat = data_load(data_path)
+    num_user, num_item, num_warm_item, train_data, val_cold_data, test_cold_data, v_feat, a_feat, t_feat = data_load(data_path)
     
     dir_str = './Data/' + data_path
     user_item_all_dict = np.load(dir_str+'/user_item_all_dict.npy', allow_pickle=True).item()
     user_item_train_dict = np.load(dir_str+'/user_item_train_dict.npy', allow_pickle=True).item()
 
-    warm_item = torch.tensor(np.load(dir_str + '/warm_set.npy'))
-    cold_item = torch.tensor(np.load(dir_str + '/cold_set.npy'))
+    # warm_item = torch.tensor(np.load(dir_str + '/warm_set.npy'))
+    # cold_item = torch.tensor(np.load(dir_str + '/cold_set.npy'))
+    warm_item = None
 
     train_dataset = TrainingDataset(num_user, num_item, user_item_all_dict, data_path, train_data, num_neg)
     
@@ -101,7 +102,7 @@ if __name__ == '__main__':
 
     print('Data has been loaded.')
     ##########################################################################################################################################
-    model = CLCRec(num_user, num_item, num_warm_item, train_data, reg_weight, dim_E, v_feat, a_feat, t_feat, temp_value, num_neg, lr_lambda, is_word, num_sample).cuda()
+    model = CLCRec(num_user, num_item, num_warm_item, train_data, reg_weight, dim_E, v_feat, a_feat, t_feat, temp_value, num_neg, lr_lambda, is_word, num_sample, device).to(device)
     
     ##########################################################################################################################################
     optimizer = torch.optim.Adam([{'params': model.parameters(), 'lr': learning_rate}])#, 'weight_decay': reg_weight}])
@@ -122,27 +123,14 @@ if __name__ == '__main__':
         torch.cuda.empty_cache()
 
         # train_precision, train_recall, train_ndcg = full_ranking(epoch, model, user_item_inter, user_item_inter, True, step, topK, 'Train', writer)
-        val_result = full_ranking(epoch,  model, val_data, user_item_train_dict, None, False, step, topK, 'Val/', writer)
-        
-        val_result_warm = full_ranking(epoch,  model, val_warm_data, user_item_train_dict, cold_item, False, step, topK, 'Val/warm_', writer)
         
         val_result_cold = full_ranking(epoch,  model, val_cold_data, user_item_train_dict, warm_item, False, step, topK, 'Val/cold_', writer)
-        
-        test_result = full_ranking(epoch, model, test_data, user_item_train_dict, None, False, step, topK, 'Test/', writer)
-        
-        test_result_warm = full_ranking(epoch, model, test_warm_data, user_item_train_dict, cold_item, False, step, topK, 'Test/warm_', writer)
-        
         test_result_cold = full_ranking(epoch, model, test_cold_data, user_item_train_dict, warm_item, False, step, topK, 'Test/cold_', writer)
 
 
-        if val_result[1] > max_recall:
+        if val_result_cold[1] > max_recall:
             pre_id_embedding = model.id_embedding
-            max_recall = val_result[1]
-            max_val_result = val_result
-            max_val_result_warm = val_result_warm
             max_val_result_cold = val_result_cold
-            max_test_result = test_result
-            max_test_result_warm = test_result_warm
             max_test_result_cold = test_result_cold
             num_decreases = 0
         else:

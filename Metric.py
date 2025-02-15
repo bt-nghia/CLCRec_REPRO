@@ -11,17 +11,20 @@ def rank(num_user, user_item_inter, mask_items, result, is_training, step, topk)
     while end_index <= num_user and start_index < end_index:
         temp_user_tensor = user_tensor[start_index:end_index]
         score_matrix = torch.matmul(temp_user_tensor, item_tensor.t())
+        # print(score_matrix.shape) #[step, bundle]
         if is_training is False:
             for row, col in user_item_inter.items():
                 if row >= start_index and row < end_index:
                     row -= start_index
-                    col = torch.LongTensor(list(col))-num_user
+                    # col = torch.LongTensor(list(col))-num_user
+                    col = torch.LongTensor(list(col))
                     score_matrix[row][col] = 1e-15
             if mask_items is not None:
                 score_matrix[:, mask_items-num_user] = 1e-15
 
         _, index_of_rank_list = torch.topk(score_matrix, topk)
-        all_index_of_rank_list = torch.cat((all_index_of_rank_list, index_of_rank_list.cpu()+num_user), dim=0)
+        # all_index_of_rank_list = torch.cat((all_index_of_rank_list, index_of_rank_list.cpu()+num_user), dim=0)
+        all_index_of_rank_list = torch.cat((all_index_of_rank_list, index_of_rank_list.cpu()), dim=0)
         start_index = end_index
         if end_index+step < num_user:
             end_index += step
